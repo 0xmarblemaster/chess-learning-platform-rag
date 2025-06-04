@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Flask backend service (updated to use Flask instead of FastAPI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chess_companion_backend
+    restart: unless-stopped
+    ports:
+      - "5001:5001"  # Updated to match README claims and frontend expectations
+    environment:
+      - WEAVIATE_URL=http://weaviate:8080
+      - API_HOST=0.0.0.0
+      - API_PORT=5001  # Updated port
+      - LOG_LEVEL=INFO  # Fixed log level format
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEBUG_MODE=false
+      - PERFORMANCE_MONITORING=true
+      - ENABLE_CACHING=true
+      - CONTEXT_AWARENESS=true
+      - QUALITY_ASSESSMENT=true
+      - ACCURACY_TRACKING=true
+    volumes:
+      - ./backend:/app/backend
+      - ./backend/data:/app/backend/data
+      - ./backend/output_images:/app/backend/output_images
+    depends_on:
+      - weaviate
+    networks:
+      - chess_companion_network
+    command: ["python", "-m", "backend.app"]  # Use Flask app instead of FastAPI
+
+  # Weaviate vector database
+  weaviate:
+    image: semitechnologies/weaviate:1.23.7
+    container_name: chess_companion_weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50051:50051"  # gRPC port for Weaviate v4 Python client
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
+      ENABLE_MODULES: 'text2vec-openai'
+      OPENAI_APIKEY: ${OPENAI_API_KEY}
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    networks:
+      - chess_companion_network
+
+  # Frontend service (React/Vue)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chess_companion_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:5001  # Updated to match backend port
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - chess_companion_network
+
+volumes:
+  weaviate_data:
+    name: chess_companion_weaviate_data
+
+networks:
+  chess_companion_network:
+    name: chess_companion_network
